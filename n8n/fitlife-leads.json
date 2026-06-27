@@ -1,1 +1,656 @@
-
+{
+  "name": "FitLife AI Sales System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "fitlife-leads",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        48,
+        416
+      ],
+      "id": "ef508225-c3b0-4fef-ba25-afc150fc97f2",
+      "name": "Webhook",
+      "webhookId": "521567ad-cca0-4da8-a14c-dcc3fb10a33c"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "70768e61-4b2c-4b9c-9515-2c6a9be0ed16",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        496,
+        416
+      ],
+      "id": "3eb53249-2ef4-4604-acd4-1de55cad0290",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst messageText = input.messageText || '';\n\n// Insert your actual Gemini API Key here\nconst GEMINI_API_KEY = 'GEMINI-API-KEY'; \n\n// The Brain: System Prompt forcing a structured JSON output\nconst systemPrompt = `You are an AI sales qualifier for a fitness coaching program called FitLife. \nAnalyze the user's message and return ONLY a valid JSON object with these exact keys:\n- \"intent\": Brief summary of their goal (e.g., \"weight loss\", \"pricing inquiry\").\n- \"budget\": Extracted budget, or \"unknown\" if not mentioned.\n- \"timeline\": Extracted timeline, or \"unknown\" if not mentioned.\n- \"leadScore\": Integer from 1 to 10 indicating buying readiness. BE STRICT. \n   - Generic statements (e.g., \"I want to lose weight\", \"hi\") = 3 to 5.\n   - Asking for details/pricing = 6 to 7. \n   - Explicitly stating they are ready to start right now or mentioning a specific budget = 8 to 10.\n- \"action\": Must be exactly one of: [\"nurture\", \"send_calendly\", \"hot_lead_call\"]. Use \"send_calendly\" for scores 7-8, \"hot_lead_call\" for scores 9-10, otherwise use \"nurture\".\n- \"replyMessage\": A natural, empathetic reply (1-2 sentences) matching their language. Either ask a qualifying question (nurture) or offer the next step.`;\n\nconst requestBody = {\n  system_instruction: { \n    parts: [{ text: systemPrompt }] \n  },\n  contents: [{ \n    role: 'user', \n    parts: [{ text: messageText }] \n  }],\n  generationConfig: { \n    response_mime_type: 'application/json' \n  }\n};\n\ntry {\n  // Make the call to Gemini using n8n's native approved helper\n  const response = await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + GEMINI_API_KEY,\n    headers: {\n      'Content-Type': 'application/json'\n    },\n    body: requestBody,\n    json: true\n  });\n\n  // Extract and parse the JSON from Gemini\n  const content = response.candidates[0].content.parts[0].text;\n  const parsedData = JSON.parse(content);\n  \n  return [{\n    json: {\n      ...input,\n      intent: parsedData.intent,\n      budget: parsedData.budget,\n      timeline: parsedData.timeline,\n      leadScore: parsedData.leadScore,\n      action: parsedData.action,\n      replyMessage: parsedData.replyMessage\n    }\n  }];\n\n} catch (e) {\n  // Fallback if the API fails\n  return [{\n    json: {\n      ...input,\n      action: 'nurture',\n      replyMessage: \"Thanks for reaching out! Could you tell me a bit more about your current fitness goals?\",\n      error: e.message\n    }\n  }];\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        320
+      ],
+      "id": "c3aace5d-70d8-4b0b-933c-3d768973426c",
+      "name": "Gemini Qualifier"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  {\"status\": \"ignored\"}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        720,
+        512
+      ],
+      "id": "2fd0e16f-963e-4c43-994d-46f6568e71f0",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR-SHEET",
+          "mode": "list",
+          "cachedResultName": "FitLife - Lead CRM",
+          "cachedResultUrl": "YOUR-SHEET"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "YOUR-SHEET"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Phone Number",
+              "lookupValue": "== {{ $json.from }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        720,
+        320
+      ],
+      "id": "5337ba31-22d7-4815-8ad1-67014b86d619",
+      "name": "CRM Lookup",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "n2bftoGUZmLFmqxj",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\n\n// Detect channel and extract message\nlet channel = 'unknown';\nlet from = '';\nlet messageText = '';\nlet leadName = '';\n\n// WhatsApp via Twilio format\nif (body.SmsStatus || body.WaId) {\n  channel = 'whatsapp_twilio';\n  from = body.WaId || body.From || '';\n  messageText = body.Body || '';\n  leadName = body.ProfileName || 'Unknown';\n}\n// WhatsApp via Meta Cloud API format\nelse if (body.object === 'whatsapp_business_account') {\n  channel = 'whatsapp_meta';\n  const entry = body.entry?.[0];\n  const change = entry?.changes?.[0];\n  const msg = change?.value?.messages?.[0];\n  from = msg?.from || '';\n  messageText = msg?.text?.body || '';\n  const contacts = change?.value?.contacts?.[0];\n  leadName = contacts?.profile?.name || 'Unknown';\n}\n// Instagram DM via ManyChat webhook format\nelse if (body.channel === 'instagram' || body.platform === 'instagram') {\n  channel = 'instagram';\n  from = body.user_id || body.from || '';\n  messageText = body.text || body.message || '';\n  leadName = body.name || body.username || 'Unknown';\n}\n// Manual test format (for testing without any channel)\nelse if (body.test === true || body.manual === true) {\n  channel = 'manual_test';\n  from = body.phone || 'test_user';\n  messageText = body.message || '';\n  leadName = body.name || 'Test Lead';\n}\n// Generic fallback\nelse {\n  channel = 'unknown';\n  from = body.from || body.phone || 'unknown';\n  messageText = body.message || body.text || body.Body || '';\n  leadName = body.name || 'Unknown';\n}\n\n// Detect language\nconst urduPattern = /[\\u0600-\\u06FF]/;\nconst language = urduPattern.test(messageText) ? 'Urdu' : 'English';\n\nif (!messageText) {\n  return [{ json: { skip: true, reason: 'Empty message' } }];\n}\n\nreturn [{\n  json: {\n    skip: false,\n    channel,\n    from,\n    messageText,\n    leadName,\n    language,\n    timestamp: new Date().toLocaleString('en-PK', { \n      timeZone: 'Asia/Karachi' \n    })\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        416
+      ],
+      "id": "ec324d19-8ed6-48db-9689-69b73bcacc51",
+      "name": "Normalize Input"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7fd3568c-4710-47a4-8960-5791e3e92627",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "send_calendly",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "8c646277-c3e4-4ee7-9c47-b5846fdae305",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "hot_lead_call",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1392,
+        128
+      ],
+      "id": "bfa7fb6b-b9d7-4f2e-9595-ada53dddd11d",
+      "name": "Route by Action"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR-SHEET",
+          "mode": "list",
+          "cachedResultName": "FitLife - Lead CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR-SHEET/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR-SHEET/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone Number": "={{ $('If').item.json.from }}",
+            "Lead Name": "={{ $('If').item.json.leadName }}",
+            "Timestamp": "={{ $('If').item.json.timestamp }}",
+            "Source": "={{ $('Normalize Input').item.json.channel }}",
+            "Intent": "={{ $('Gemini Qualifier').item.json.intent }}",
+            "Budget": "={{ $('Gemini Qualifier').item.json.budget }}",
+            "Timeline": "={{ $('Gemini Qualifier').item.json.timeline }}",
+            "Lead Score": "={{ $('Gemini Qualifier').item.json.leadScore }}",
+            "Status": "={{ $('Gemini Qualifier').item.json.action }}",
+            "Language": "={{ $('Normalize Input').item.json.language }}",
+            "Conversation Log": "={{ $('Normalize Input').item.json.messageText }}",
+            "Action Taken": "={{ $('Gemini Qualifier').item.json.action }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Lead Name",
+              "displayName": "Lead Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Phone Number",
+              "displayName": "Phone Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Intent",
+              "displayName": "Intent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Budget",
+              "displayName": "Budget",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Timeline",
+              "displayName": "Timeline",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Lead Score",
+              "displayName": "Lead Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Language",
+              "displayName": "Language",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Conversation Log",
+              "displayName": "Conversation Log",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Action Taken",
+              "displayName": "Action Taken",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1616,
+        224
+      ],
+      "id": "b4fc720d-c866-42ba-8931-2c4aeae082ac",
+      "name": "Log to CRM",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "n2bftoGUZmLFmqxj",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "from": "=whatsapp:+14155238886",
+        "to": "=whatsapp:{{ $json['Phone Number'] }}",
+        "message": "={{ $('Gemini Qualifier').item.json.replyMessage }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1840,
+        224
+      ],
+      "id": "8b2481f6-57c2-44e7-b550-7a49f1ab950e",
+      "name": "Send an SMS/MMS/WhatsApp message",
+      "credentials": {
+        "twilioApi": {
+          "id": "V9Sts7DHj1t19qDr",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "send_calendly",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "03027c46-183c-4461-a36b-acefd570e488"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "12e25dca-ace3-4330-9084-612f88bebb55",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "hot_lead_call",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "10fb51dd-b88e-45a9-9da4-c281257ed88b",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "=nurture",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1168,
+        400
+      ],
+      "id": "CALENDLY-ID",
+      "name": "Switch1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "afad83d7-29a5-4f5a-bc02-6c3a05b129bc",
+              "name": "final-reply",
+              "value": "={{ $('Gemini Qualifier').item.json.replyMessage }}Here is my booking link: https://calendly.com/salehaasghar46/30min",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1392,
+        320
+      ],
+      "id": "29d827a0-0674-4b7f-b813-e827a09d25e0",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "fromEmail": "EMAIL",
+        "toEmail": "EMAIL",
+        "subject": "=Action Required: New Hot Lead - {{ $('Normalize Input').item.json.leadName }}",
+        "emailFormat": "text",
+        "text": "=A hot lead has just come in and is ready for a call!\n\nLead Details:\n- Name: {{ $('Normalize Input').item.json.leadName }}\n- Phone: {{ $('Normalize Input').item.json.from }}\n- Goal: {{ $('Gemini Qualifier').item.json.intent }}\n- Lead Score: {{ $('Gemini Qualifier').item.json.leadScore }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1392,
+        512
+      ],
+      "id": "496d5b5e-f731-4aec-bccd-b69ce65b6911",
+      "name": "Send an Email",
+      "webhookId": "5242c2cb-5f46-4566-b358-9b3000cf0f07",
+      "credentials": {
+        "smtp": {
+          "id": "yl4OAQ4bHrPRCp5y",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "CRM Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CRM Lookup": {
+      "main": [
+        [
+          {
+            "node": "Gemini Qualifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Qualifier": {
+      "main": [
+        [
+          {
+            "node": "Route by Action",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Switch1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Action": {
+      "main": [
+        [
+          {
+            "node": "Log to CRM",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log to CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to CRM": {
+      "main": [
+        [
+          {
+            "node": "Send an SMS/MMS/WhatsApp message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch1": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Log to CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send an Email": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "75545466-95da-41b6-8313-c21bcd072545",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4769e9b0007a7c5863212d08753ad00c2a6ce2744c78ba0bd08e2b80aac0ae53"
+  },
+  "nodeGroups": [],
+  "id": "XEQdEYIdIVYSgyPB",
+  "tags": []
+}
